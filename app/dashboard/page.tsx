@@ -21,6 +21,12 @@ export default function DashboardPage() {
 
   return (
     <div style={{ maxWidth: 600, margin: '2rem auto' }}>
+      <nav style={{ marginBottom: 20 }}>
+        <a href="/dashboard" style={{ marginRight: 15 }}>Dashboard</a>
+        <a href="/file-complaint" style={{ marginRight: 15 }}>File Complaint</a>
+        <a href="/my-complaints" style={{ marginRight: 15 }}>My Complaints</a>
+        {role === 'admin' && <a href="/admin">Admin Panel</a>}
+      </nav>
       <h1>Welcome, {session.user?.name}</h1>
       <p>Role: {role}</p>
       {role === 'admin' ? (
