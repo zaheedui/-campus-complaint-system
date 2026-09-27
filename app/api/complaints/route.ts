@@ -47,16 +47,26 @@ export async function GET(req: NextRequest) {
   const pool = getPool();
   await connectMongo();
 
-  // Fetch structured workflow data from MySQL
-  const [rows]: any = await pool.query(`
+  const { searchParams } = new URL(req.url);
+  const userId = searchParams.get('userId');
+
+  let query = `
     SELECT c.id, c.mongo_ref_id, c.status, c.is_anonymous, c.created_at,
            cc.name AS category, c.filed_by, c.assigned_to
     FROM complaints c
     JOIN complaint_categories cc ON c.category_id = cc.id
-    ORDER BY c.created_at DESC
-  `);
+  `;
+  const queryParams: any[] = [];
 
-  // Fetch the matching Mongo documents for each complaint
+  if (userId) {
+    query += ` WHERE c.filed_by = ?`;
+    queryParams.push(userId);
+  }
+
+  query += ` ORDER BY c.created_at DESC`;
+
+  const [rows]: any = await pool.query(query, queryParams);
+
   const enriched = await Promise.all(
     rows.map(async (row: any) => {
       const mongoDoc = await ComplaintReport.findById(row.mongo_ref_id).lean();
