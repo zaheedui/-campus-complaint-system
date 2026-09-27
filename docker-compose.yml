@@ -3,13 +3,14 @@ services:
   mysql:
     image: mysql:8.0
     restart: always
+    command: --log-bin-trust-function-creators=1
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
       MYSQL_DATABASE: campus_complaints
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppass
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
 
@@ -17,7 +18,7 @@ services:
     image: mongo:7.0
     restart: always
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - mongo_data:/data/db
 
