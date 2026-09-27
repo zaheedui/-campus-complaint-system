@@ -42,3 +42,38 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'Failed to file complaint' }, { status: 500 });
   }
 }
+
+export async function GET(req: NextRequest) {
+  const pool = getPool();
+  await connectMongo();
+
+  // Fetch structured workflow data from MySQL
+  const [rows]: any = await pool.query(`
+    SELECT c.id, c.mongo_ref_id, c.status, c.is_anonymous, c.created_at,
+           cc.name AS category, c.filed_by, c.assigned_to
+    FROM complaints c
+    JOIN complaint_categories cc ON c.category_id = cc.id
+    ORDER BY c.created_at DESC
+  `);
+
+  // Fetch the matching Mongo documents for each complaint
+  const enriched = await Promise.all(
+    rows.map(async (row: any) => {
+      const mongoDoc = await ComplaintReport.findById(row.mongo_ref_id).lean();
+      return {
+        id: row.id,
+        status: row.status,
+        category: row.category,
+        isAnonymous: !!row.is_anonymous,
+        filedBy: row.is_anonymous ? null : row.filed_by,
+        assignedTo: row.assigned_to,
+        createdAt: row.created_at,
+        description: mongoDoc?.description,
+        location: mongoDoc?.location,
+        comments: mongoDoc?.comments || []
+      };
+    })
+  );
+
+  return Response.json(enriched);
+}
