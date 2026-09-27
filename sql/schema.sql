@@ -77,3 +77,16 @@ BEGIN
 END$$
 
 DELIMITER ;
+
+
+
+-- ============================
+-- View: open complaints summary, for admin dashboard
+-- ============================
+
+CREATE VIEW open_complaints_summary AS
+SELECT cc.name AS category, COUNT(*) AS open_count
+FROM complaints c
+JOIN complaint_categories cc ON c.category_id = cc.id
+WHERE c.status IN ('open', 'assigned', 'in_progress')
+GROUP BY cc.name;
