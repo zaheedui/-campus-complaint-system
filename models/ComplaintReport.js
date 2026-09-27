@@ -31,4 +31,4 @@ const complaintReportSchema = new mongoose.Schema({
 
 complaintReportSchema.index({ description: 'text', location: 'text' });
 
-module.exports = mongoose.model('ComplaintReport', complaintReportSchema);
+module.exports = mongoose.models.ComplaintReport || mongoose.model('ComplaintReport', complaintReportSchema);
