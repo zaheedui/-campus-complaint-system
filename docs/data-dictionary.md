@@ -59,3 +59,9 @@
 **Indexes:** a compound text index on `description` and `location`, supporting the lost/found matching feature (full-text search).
 
 **Design rationale:** category-specific fields (`location`/`photoUrl` vs. `roomNumber`/`issueType`) vary per document rather than being forced into a single rigid table with many nullable columns — this is the core justification for using MongoDB on this side of the system.
+
+
+
+# Design Decisions
+
+**Admin access to student-facing features:** Admin accounts retain access to "File Complaint" and "My Complaints" alongside admin-only tools, since an administrator may also be a member of the campus community who wishes to file their own reports (e.g., their own lost item). This does not expose any privileged data or operation — it simply means the admin role is a superset of student capabilities rather than a fully separate, walled-off persona. Role-based restriction is enforced only where it matters: non-admins are blocked from `/admin` and its underlying management actions (status changes, viewing all complaints) via middleware.
