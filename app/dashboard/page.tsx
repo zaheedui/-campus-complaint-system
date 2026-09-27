@@ -1,5 +1,5 @@
 'use client';
-
+import { signOut } from 'next-auth/react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -28,6 +28,9 @@ export default function DashboardPage() {
       ) : (
         <p>Student view — file a complaint or check your existing ones.</p>
       )}
+      <button onClick={() => signOut({ callbackUrl: '/login' })} style={{ marginTop: 20, padding: '8px 16px' }}>
+        Log Out
+      </button>
     </div>
   );
 }
