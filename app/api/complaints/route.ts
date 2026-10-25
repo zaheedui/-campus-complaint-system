@@ -3,8 +3,7 @@ import { randomUUID } from 'crypto';
 import neo4j from 'neo4j-driver';
 import { getPool } from '@/lib/mysql';
 import { getDriver } from '@/lib/neo4j';
-import { connectMongo } from '@/lib/mongo';
-import ComplaintReport from '@/models/ComplaintReport';
+
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -71,7 +70,6 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const pool = getPool();
-  await connectMongo();
 
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('userId');
@@ -93,23 +91,45 @@ export async function GET(req: NextRequest) {
 
   const [rows]: any = await pool.query(query, queryParams);
 
-  const enriched = await Promise.all(
-    rows.map(async (row: any) => {
-      const mongoDoc = await ComplaintReport.findById(row.mongo_ref_id).lean();
-      return {
-        id: row.id,
-        status: row.status,
-        category: row.category,
-        isAnonymous: !!row.is_anonymous,
-        filedBy: row.is_anonymous ? null : row.filed_by,
-        assignedTo: row.assigned_to,
-        createdAt: row.created_at,
-        description: mongoDoc?.description,
-        location: mongoDoc?.location,
-        comments: mongoDoc?.comments || []
-      };
-    })
-  );
+  // One Neo4j query fetches the report details for every complaint in the list
+  const details = new Map<string, { description?: string; location?: string }>();
+  const refIds = rows.map((r: any) => r.mongo_ref_id);
+
+  if (refIds.length > 0) {
+    const session = getDriver().session();
+    try {
+      const res = await session.run(
+        `MATCH (c:Complaint) WHERE c.refId IN $refIds
+         OPTIONAL MATCH (c)-[:AT_LOCATION]->(l:Location)
+         RETURN c.refId AS refId, c.description AS description, l.name AS location`,
+        { refIds }
+      );
+      res.records.forEach((rec) => {
+        details.set(rec.get('refId'), {
+          description: rec.get('description'),
+          location: rec.get('location') ?? undefined
+        });
+      });
+    } finally {
+      await session.close();
+    }
+  }
+
+  const enriched = rows.map((row: any) => {
+    const d = details.get(row.mongo_ref_id);
+    return {
+      id: row.id,
+      status: row.status,
+      category: row.category,
+      isAnonymous: !!row.is_anonymous,
+      filedBy: row.is_anonymous ? null : row.filed_by,
+      assignedTo: row.assigned_to,
+      createdAt: row.created_at,
+      description: d?.description,
+      location: d?.location,
+      comments: []
+    };
+  });
 
   return Response.json(enriched);
 }
