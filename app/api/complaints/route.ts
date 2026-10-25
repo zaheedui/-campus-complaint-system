@@ -1,5 +1,8 @@
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'crypto';
+import neo4j from 'neo4j-driver';
 import { getPool } from '@/lib/mysql';
+import { getDriver } from '@/lib/neo4j';
 import { connectMongo } from '@/lib/mongo';
 import ComplaintReport from '@/models/ComplaintReport';
 
@@ -7,39 +10,62 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { category, description, location, roomNumber, issueType, isAnonymous, userId, categoryId } = body;
 
-  await connectMongo();
+  const refId = randomUUID();
 
-  // Step 1: create the flexible report in MongoDB first
-  const mongoDoc = await ComplaintReport.create({
-    category,
-    description,
-    location,
-    roomNumber,
-    issueType,
-    isAnonymous: !!isAnonymous,
-    ...(isAnonymous ? {} : { filedByUserId: userId }) // omit entirely if anonymous
-  });
+  // Only include optional fields that were actually provided
+  const props: Record<string, any> = { refId, description, isAnonymous: !!isAnonymous };
+  if (roomNumber) props.roomNumber = roomNumber;
+  if (issueType) props.issueType = issueType;
+  const locationName = location ? String(location).trim().toLowerCase() : null;
 
-  // Step 2: create the workflow record in MySQL, referencing the Mongo doc
-  const pool = getPool();
+  const session = getDriver().session();
+
   try {
-    const [result]: any = await pool.query(
-      `INSERT INTO complaints (mongo_ref_id, category_id, filed_by, is_anonymous, status)
-       VALUES (?, ?, ?, ?, 'open')`,
-      [mongoDoc._id.toString(), categoryId, isAnonymous ? null : userId, !!isAnonymous]
+    // Step 1: create the report as a node in Neo4j, linked to its category and location
+    const created = await session.run(
+      `MATCH (cat:Category {name: $category})
+       CREATE (c:Complaint)
+       SET c += $props, c.createdAt = datetime()
+       CREATE (c)-[:IN_CATEGORY]->(cat)
+       WITH c
+       FOREACH (_ IN CASE WHEN $locationName IS NULL THEN [] ELSE [1] END |
+         MERGE (l:Location {name: $locationName})
+         CREATE (c)-[:AT_LOCATION]->(l))
+       RETURN c.refId AS refId`,
+      { category, props, locationName }
     );
 
-    // link back: store the MySQL id on the Mongo doc too, for easy lookup later
-    mongoDoc.postgresComplaintId = result.insertId;
-    await mongoDoc.save();
+    if (created.records.length === 0) {
+      return Response.json({ error: 'Unknown category' }, { status: 400 });
+    }
 
-    return Response.json({ complaintId: result.insertId, mongoId: mongoDoc._id }, { status: 201 });
+    // Step 2: create the workflow row in MySQL
+    const pool = getPool();
+    try {
+      const [result]: any = await pool.query(
+        `INSERT INTO complaints (mongo_ref_id, category_id, filed_by, is_anonymous, status)
+         VALUES (?, ?, ?, ?, 'open')`,
+        [refId, categoryId, isAnonymous ? null : userId, !!isAnonymous]
+      );
 
+      // Link back: store the MySQL id on the Neo4j node
+      await session.run(
+        `MATCH (c:Complaint {refId: $refId}) SET c.mysqlId = $mysqlId`,
+        { refId, mysqlId: neo4j.int(result.insertId) }
+      );
+
+      return Response.json({ complaintId: result.insertId, refId }, { status: 201 });
+    } catch (err) {
+      // Compensating rollback: MySQL failed, so remove the Neo4j node
+      await session.run(`MATCH (c:Complaint {refId: $refId}) DETACH DELETE c`, { refId });
+      console.error('Complaint creation failed, rolled back Neo4j node:', err);
+      return Response.json({ error: 'Failed to file complaint' }, { status: 500 });
+    }
   } catch (err) {
-    // Compensating rollback: MySQL failed, so undo the Mongo write
-    await ComplaintReport.findByIdAndDelete(mongoDoc._id);
-    console.error('Complaint creation failed, rolled back Mongo doc:', err);
+    console.error('Neo4j write failed:', err);
     return Response.json({ error: 'Failed to file complaint' }, { status: 500 });
+  } finally {
+    await session.close();
   }
 }
 
