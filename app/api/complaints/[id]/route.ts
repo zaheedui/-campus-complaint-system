@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server';
 import { getPool } from '@/lib/mysql';
 import { getDriver } from '@/lib/neo4j';
-
+   import { getCaller } from '@/lib/authz';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+     const caller = await getCaller(req);
+   if (!caller) return Response.json({ error: 'Not logged in' }, { status: 401 });
   const pool = getPool();
 
   const [rows]: any = await pool.query(`
@@ -19,6 +21,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const row = rows[0];
+     if (caller.role !== 'admin' && row.filed_by !== caller.id) {
+     return Response.json({ error: 'Not allowed' }, { status: 403 });
+   }
 
   // Fetch this complaint's report details from Neo4j
   let details: Record<string, any> = {};

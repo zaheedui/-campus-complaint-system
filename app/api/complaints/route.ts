@@ -3,11 +3,15 @@ import { randomUUID } from 'crypto';
 import neo4j from 'neo4j-driver';
 import { getPool } from '@/lib/mysql';
 import { getDriver } from '@/lib/neo4j';
+import { getCaller } from '@/lib/authz';
 
 
 export async function POST(req: NextRequest) {
+  const caller = await getCaller(req);
+  if (!caller) return Response.json({ error: 'Not logged in' }, { status: 401 });
+
   const body = await req.json();
-  const { category, description, location, roomNumber, issueType, isAnonymous, userId, categoryId } = body;
+  const { category, description, location, roomNumber, issueType, isAnonymous, categoryId } = body;
 
   const refId = randomUUID();
 
@@ -44,7 +48,7 @@ export async function POST(req: NextRequest) {
       const [result]: any = await pool.query(
         `INSERT INTO complaints (graph_ref_id, category_id, filed_by, is_anonymous, status)
          VALUES (?, ?, ?, ?, 'open')`,
-        [refId, categoryId, isAnonymous ? null : userId, !!isAnonymous]
+        [refId, categoryId, isAnonymous ? null : caller.id, !!isAnonymous]
       );
 
       // Link back: store the MySQL id on the Neo4j node
@@ -70,9 +74,12 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const pool = getPool();
+  const caller = await getCaller(req);
+   if (!caller) return Response.json({ error: 'Not logged in' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const userId = searchParams.get('userId');
+     // Students only ever see their own complaints; admins see all, or filter by user
+   const userId = caller.role === 'admin' ? searchParams.get('userId') : String(caller.id);
 
   let query = `
     SELECT c.id, c.graph_ref_id, c.status, c.is_anonymous, c.created_at,
