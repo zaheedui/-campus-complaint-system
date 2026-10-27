@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import neo4j from 'neo4j-driver';
 import { getPool } from '@/lib/mysql';
 import { getDriver } from '@/lib/neo4j';
+import { getCaller } from '@/lib/authz';
 
 // Common words that would create false matches
 const STOP_WORDS = new Set([
@@ -24,6 +25,9 @@ const toNum = (v: any) => (neo4j.isInt(v) ? v.toNumber() : v);
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const caller = await getCaller(req);
+   if (!caller) return Response.json({ error: 'Not logged in' }, { status: 401 });
+   if (caller.role !== 'admin') return Response.json({ error: 'Admins only' }, { status: 403 });
   const pool = getPool();
 
   const [rows]: any = await pool.query(
