@@ -10,6 +10,7 @@ export default function SignupPage() {
   const [role, setRole] = useState('student');
   const [error, setError] = useState('');
   const router = useRouter();
+     const [adminCode, setAdminCode] = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -18,7 +19,7 @@ export default function SignupPage() {
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, role })
+      body: JSON.stringify({ name, email, password, role, adminCode })
     });
 
     if (res.ok) {
@@ -44,6 +45,11 @@ export default function SignupPage() {
           <option value="student">Student</option>
           <option value="admin">Admin</option>
         </select>
+           {role === 'admin' && (
+     <input type="password" placeholder="Admin access code" value={adminCode}
+       onChange={(e) => setAdminCode(e.target.value)}
+       style={{ display: 'block', width: '100%', marginBottom: 10, padding: 8 }} />
+   )}
         {error && <p style={{ color: 'red' }}>{error}</p>}
         <button type="submit" style={{ padding: '8px 16px' }}>Sign Up</button>
       </form>

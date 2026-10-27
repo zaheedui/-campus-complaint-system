@@ -3,11 +3,14 @@ import bcrypt from 'bcrypt';
 import { getPool } from '@/lib/mysql';
 
 export async function POST(req: NextRequest) {
-  const { name, email, password, role } = await req.json();
+     const { name, email, password, role, adminCode } = await req.json();
 
   if (!name || !email || !password || !role) {
     return Response.json({ error: 'Missing fields' }, { status: 400 });
   }
+     if (role === 'admin' && (!process.env.ADMIN_SIGNUP_CODE || adminCode !== process.env.ADMIN_SIGNUP_CODE)) {
+     return Response.json({ error: 'Invalid admin code' }, { status: 403 });
+   }
 
   const roleId = role === 'admin' ? 2 : 1;
   const passwordHash = await bcrypt.hash(password, 10);

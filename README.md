@@ -38,6 +38,7 @@ A role-based complaint management system for campus lost & found, hostel mainten
    NEO4J_PASSWORD="neo4jpass123"
    NEXTAUTH_SECRET="any-long-random-string"
    NEXTAUTH_URL="http://localhost:3000"
+   ADMIN_SIGNUP_CODE="choose-a-code"
    ```
 
 4. **Start the databases**
