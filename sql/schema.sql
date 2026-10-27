@@ -36,7 +36,7 @@ CREATE TABLE complaint_categories (
 -- content in MongoDB via mongo_ref_id
 CREATE TABLE complaints (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  mongo_ref_id VARCHAR(50) NOT NULL,          -- links to MongoDB complaintreports._id
+  mongo_ref_id VARCHAR(50) NOT NULL,             -- links to the report in the NoSQL store (renamed to graph_ref_id below)
   category_id INT NOT NULL,
   filed_by INT,                                -- NULL when is_anonymous = TRUE
   assigned_to INT,                             -- admin handling this complaint
@@ -100,3 +100,11 @@ FROM complaints c
 JOIN complaint_categories cc ON c.category_id = cc.id
 WHERE c.status IN ('open', 'assigned', 'in_progress')
 GROUP BY cc.name;
+
+
+   -- ============================
+   -- Migration: the NoSQL store changed from MongoDB to Neo4j, so the
+   -- reference column now holds the refId of the Neo4j Complaint node
+   -- ============================
+
+   ALTER TABLE complaints RENAME COLUMN mongo_ref_id TO graph_ref_id;

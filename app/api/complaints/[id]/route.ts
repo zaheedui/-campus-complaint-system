@@ -7,7 +7,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const pool = getPool();
 
   const [rows]: any = await pool.query(`
-    SELECT c.id, c.mongo_ref_id, c.status, c.is_anonymous, c.created_at,
+    SELECT c.id, c.graph_ref_id, c.status, c.is_anonymous, c.created_at,
            cc.name AS category, c.filed_by, c.assigned_to
     FROM complaints c
     JOIN complaint_categories cc ON c.category_id = cc.id
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
        OPTIONAL MATCH (c)-[:AT_LOCATION]->(l:Location)
        RETURN c.description AS description, c.roomNumber AS roomNumber,
               c.issueType AS issueType, l.name AS location`,
-      { refId: row.mongo_ref_id }
+      { refId: row.graph_ref_id }
     );
     if (res.records.length > 0) {
       const rec = res.records[0];

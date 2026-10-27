@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     const pool = getPool();
     try {
       const [result]: any = await pool.query(
-        `INSERT INTO complaints (mongo_ref_id, category_id, filed_by, is_anonymous, status)
+        `INSERT INTO complaints (graph_ref_id, category_id, filed_by, is_anonymous, status)
          VALUES (?, ?, ?, ?, 'open')`,
         [refId, categoryId, isAnonymous ? null : userId, !!isAnonymous]
       );
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
   const userId = searchParams.get('userId');
 
   let query = `
-    SELECT c.id, c.mongo_ref_id, c.status, c.is_anonymous, c.created_at,
+    SELECT c.id, c.graph_ref_id, c.status, c.is_anonymous, c.created_at,
            cc.name AS category, c.filed_by, c.assigned_to
     FROM complaints c
     JOIN complaint_categories cc ON c.category_id = cc.id
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
 
   // One Neo4j query fetches the report details for every complaint in the list
   const details = new Map<string, { description?: string; location?: string }>();
-  const refIds = rows.map((r: any) => r.mongo_ref_id);
+  const refIds = rows.map((r: any) => r.graph_ref_id);
 
   if (refIds.length > 0) {
     const session = getDriver().session();
@@ -116,7 +116,7 @@ export async function GET(req: NextRequest) {
   }
 
   const enriched = rows.map((row: any) => {
-    const d = details.get(row.mongo_ref_id);
+    const d = details.get(row.graph_ref_id);
     return {
       id: row.id,
       status: row.status,

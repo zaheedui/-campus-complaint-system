@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const pool = getPool();
 
   const [rows]: any = await pool.query(
-    `SELECT c.mongo_ref_id, cc.name AS category
+    `SELECT c.graph_ref_id, cc.name AS category
      FROM complaints c
      JOIN complaint_categories cc ON c.category_id = cc.id
      WHERE c.id = ?`,
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return Response.json({ error: 'Complaint not found' }, { status: 404 });
   }
 
-  const { mongo_ref_id: refId, category } = rows[0];
+  const { graph_ref_id: refId, category } = rows[0];
 
   if (!['lost_item', 'found_item'].includes(category)) {
     return Response.json({ error: 'Matching only applies to lost/found items' }, { status: 400 });
