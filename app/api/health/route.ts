@@ -1,9 +1,8 @@
 import mysql from 'mysql2/promise';
-import { MongoClient } from 'mongodb';
 import { getDriver } from '@/lib/neo4j';
 
 export async function GET() {
-  const result = { mysql: 'down', mongo: 'down', neo4j: 'down' };
+  const result = { mysql: 'down', neo4j: 'down' };
 
   try {
     const conn = await mysql.createConnection(process.env.DATABASE_URL!);
@@ -12,16 +11,6 @@ export async function GET() {
     result.mysql = 'ok';
   } catch (err) {
     console.error('MySQL health check failed:', err);
-  }
-
-  try {
-    const client = new MongoClient(process.env.MONGODB_URI!);
-    await client.connect();
-    await client.db().command({ ping: 1 });
-    await client.close();
-    result.mongo = 'ok';
-  } catch (err) {
-    console.error('Mongo health check failed:', err);
   }
 
   const session = getDriver().session();
