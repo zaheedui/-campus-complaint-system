@@ -1,14 +1,27 @@
 # Test Cases
 
-| # | Test Case | Expected Result | Actual Result | Status |
-|---|---|---|---|---|
-| 1 | File a non-anonymous complaint | MySQL and MongoDB both get linked records via mongo_ref_id / postgresComplaintId | Confirmed — ids matched correctly across both databases | Pass |
-| 2 | File an anonymous complaint | filedByUserId field absent entirely from MongoDB document; filed_by is NULL in MySQL | Confirmed on ragging complaint test | Pass |
-| 3 | Insert an invalid status directly in MySQL | CHECK constraint rejects the insert | Error Code 1046 / 3819 raised, insert blocked | Pass |
-| 4 | Insert a complaint referencing a non-existent filed_by user | Foreign key constraint rejects the insert | Error 1452 raised (ER_NO_REFERENCED_ROW_2) | Pass |
-| 5 | Student account accesses /admin directly via URL | Middleware redirects to /dashboard | Confirmed | Pass |
-| 6 | Admin account accesses /admin | Access granted, dashboard renders | Confirmed | Pass |
-| 7 | Admin updates a complaint's status | Transaction commits; last_updated trigger fires automatically | Confirmed, timestamp updated without app code setting it | Pass |
-| 8 | Lost item vs. found item text search matching | Correct match returned with a relevance score | Confirmed — backpack match returned, score 2.75 | Pass |
-| 9 | MySQL container fails mid-write during complaint filing | MongoDB document is rolled back (deleted) to avoid orphaned data | Confirmed via forced foreign key failure test | Pass |
-| 10 | Duplicate email signup attempt | Signup rejected with 409 error | Confirmed — "Email already registered" returned | Pass |
+| # | Area | Test case | Expected result | Actual result | Status |
+|---|---|---|---|---|---|
+| 1 | Filing | File a non-anonymous complaint through the form | A MySQL row and a Neo4j Complaint node are created and linked by `graph_ref_id` = `refId` | Confirmed. Complaint 24 was created and the ids matched | Pass |
+| 2 | Filing | File an anonymous complaint | `filed_by` is NULL in MySQL, and the Neo4j node has no property that identifies the filer | Confirmed in both databases | Pass |
+| 3 | Filing | MySQL insert fails after the Neo4j node is created (category id 99 does not exist) | An error is returned and the Neo4j node is deleted by the compensating rollback | Error returned and no leftover node found | Pass |
+| 4 | Filing | Tick "anonymous" under Ragging, then switch to another category and submit | The anonymous flag resets and the complaint is stored as non-anonymous | Confirmed after the fix | Pass |
+| 5 | MySQL integrity | Insert a complaint with an invalid status directly in MySQL | The CHECK constraint rejects it | Error 3819 raised | Pass |
+| 6 | MySQL integrity | Insert a complaint whose `filed_by` user does not exist | The foreign key rejects it | Error 1452 raised | Pass |
+| 7 | MySQL integrity | Sign up with an email that is already registered | Rejected with a 409 error | "Email already registered" returned | Pass |
+| 8 | Neo4j integrity | Create a second Category node named `lost_item` | The uniqueness constraint rejects it | Rejected with a constraint error | Pass |
+| 9 | Access control | A student opens `/admin` | Redirected to `/dashboard` | Confirmed | Pass |
+| 10 | Access control | An admin opens `/admin` | Access granted | Confirmed | Pass |
+| 11 | Transaction | Admin changes a complaint's status from the dashboard | The transaction commits and the new status is shown | Confirmed | Pass |
+| 12 | Validation | Send a status update with an invalid status through the API | Rejected with 400 and no database change | "Invalid status" returned | Pass |
+| 13 | Trigger | Update a complaint row | `last_updated` is set automatically | Confirmed. The timestamp changed without application code setting it | Pass |
+| 14 | View | Open the admin dashboard | `open_complaints_summary` shows open counts per category | Confirmed | Pass |
+| 15 | Matching | Click Check Matches on a lost report | The found report is returned, ranked higher when it shares the location | Complaint 25 was returned for complaint 24 with `sameLocation: true` and a score of about 1.23 | Pass |
+| 16 | Retrieval | Open My Complaints as a student | Only that student's non-anonymous complaints are shown | Confirmed | Pass |
+| 17 | Retrieval | Request a complaint id that does not exist | 404 with an error message | "Complaint not found" returned | Pass |
+
+## Known limitations
+- If the MySQL insert fails after a new location was created in Neo4j, the rollback deletes the Complaint node but leaves an unused Location node behind. It is harmless and could be cleaned up in a future version.
+
+## Evidence
+Screenshots are in `docs/screenshots/`: `project_er_diagram.png`, `neo4j_schema.png` and `neo4j_constraint_error.png`.
