@@ -19,6 +19,13 @@
 | 15 | Matching | Click Check Matches on a lost report | The found report is returned, ranked higher when it shares the location | Complaint 25 was returned for complaint 24 with `sameLocation: true` and a score of about 1.23 | Pass |
 | 16 | Retrieval | Open My Complaints as a student | Only that student's non-anonymous complaints are shown | Confirmed | Pass |
 | 17 | Retrieval | Request a complaint id that does not exist | 404 with an error message | "Complaint not found" returned | Pass |
+| 18 | API security | Call the admin summary, status update and matches routes while logged out | Rejected with 401 and no data change | Confirmed. Status of complaint 24 did not change | Pass |
+| 19 | API security | A logged-in student opens `/api/admin/summary` | Rejected with 403 "Admins only" | Confirmed | Pass |
+| 20 | API security | Call the list, detail and filing routes while logged out | Rejected with 401 | Confirmed | Pass |
+| 21 | API security | A student opens `/api/complaints` | Only that student's own complaints are returned | Confirmed | Pass |
+| 22 | API security | A student opens another user's complaint through the API | Rejected with 403 "Not allowed" | Confirmed | Pass |
+| 23 | Signup | Sign up as admin with a missing or wrong admin code | Rejected with 403 "Invalid admin code" | Confirmed from both curl and the signup page | Pass |
+| 24 | Signup | Sign up as admin with the correct admin code | Account created, and the user can reach the admin panel | Confirmed | Pass |
 
 ## Known limitations
 - If the MySQL insert fails after a new location was created in Neo4j, the rollback deletes the Complaint node but leaves an unused Location node behind. It is harmless and could be cleaned up in a future version.

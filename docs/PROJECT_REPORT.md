@@ -138,16 +138,19 @@ LIMIT 5
 6. **Cross-database consistency (application level).** MySQL and Neo4j cannot share a transaction, so filing a complaint creates the Neo4j node first and then the MySQL row. If the MySQL insert fails, the node is deleted again (a compensating rollback). This was tested (test case 3).
 
 ## 12. Authentication and Authorization
-- Sign-up and login use NextAuth with the Credentials provider and JWT sessions. Passwords are hashed with bcrypt.
-- Two roles, Student and Admin, stored in MySQL and carried in the session.
-- Next.js middleware requires login for `/dashboard` and restricts `/admin` to admins; other users are redirected to `/dashboard` (test cases 9 and 10).
-- Admins keep access to the student features by design, since an administrator may also want to file a report.
+   - Sign-up and login use NextAuth (Credentials provider) with JWT sessions. Passwords are hashed with bcrypt.
+   - Two roles, Student and Admin, stored in MySQL and carried in the session.
+   - **Page level:** middleware requires login for `/dashboard` and restricts `/admin` to admins. Other users are redirected to `/dashboard` (test cases 9 and 10).
+   - **API level:** every complaint and admin route reads the caller from the session (`lib/authz.ts`). Logged-out requests get 401. The admin routes (summary, status update, matching) return 403 to students, and students can only list and open their own complaints (test cases 18 to 22). The filer's identity is taken from the session, not from the request body.
+   - **Admin sign-up** requires an access code held in the `ADMIN_SIGNUP_CODE` environment variable, so choosing "Admin" in the form is not enough to create an admin account (test cases 23 and 24).
+   - Admins keep access to the student features by design, since an administrator may also want to file a report.
 
 ## 13. Security and Data Integrity
 - Passwords are stored only as bcrypt hashes.
 - Database settings and secrets are read from environment variables. `.env.local` is excluded from Git, and `.env.example` holds placeholders. The passwords in `docker-compose.yml` are local development values.
 - All SQL uses parameterized queries.
 - Integrity is enforced in the databases: foreign keys, a CHECK constraint on status, unique emails in MySQL, and uniqueness constraints in Neo4j (test cases 5 to 8).
+- The admin access code is also read from an environment variable and is never committed.
 
 ## 14. Screenshots
 Database evidence:
@@ -160,7 +163,7 @@ Database evidence:
 Application screens are in `docs/screenshots/`: login (`Cc_Login.png`), student dashboard (`Cc_user_dashboard.png`), file-complaint form (`Cc_user_file-complaint.png`), my complaints (`Cc_user_complaints.png`), admin dashboard (`Cc_admin_dashboard.png`) and admin panel (`Cc_admin_pannel.png`).
 
 ## 15. Testing Results
-`docs/test-cases.md` lists 17 test cases covering cross-database filing, anonymity, the rollback, MySQL and Neo4j constraints, role-based access, the transaction, the trigger, the view and the matching. All 17 pass.
+'docs/test-cases.md' lists 24 test cases covering cross-database filing, anonymity, the rollback, MySQL and Neo4j constraints, role-based access at page and API level, admin sign-up, the transaction, the trigger, the view and the matching. All 24 pass.
 
 ## 16. Individual Contribution
 **[Your name]:** [Write what you did. Based on the project history, that is the database design (MySQL schema, Neo4j graph model), all API routes, the cross-database filing and rollback logic, authentication and middleware, the advanced database features, the Neo4j migration, the interface and the documentation.]

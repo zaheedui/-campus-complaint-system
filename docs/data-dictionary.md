@@ -102,3 +102,6 @@ There is no foreign key between MySQL and Neo4j. The link is `complaints.graph_r
 # Design Decisions
 
 **Admin access to student-facing features:** Admin accounts keep access to "File Complaint" and "My Complaints" alongside the admin tools, because an administrator may also be a member of the campus community who wants to file their own report (for example, a lost item). This exposes no privileged data. The `/admin` page is restricted to admins by middleware, which redirects non-admins to `/dashboard`.
+
+
+**API-level enforcement:** the role rules are enforced inside the API routes, not only by the page middleware. See `docs/PROJECT_REPORT.md`, Section 12.
