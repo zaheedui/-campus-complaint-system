@@ -58,7 +58,7 @@ A role-based complaint management system for campus lost & found, hostel mainten
    ```bash
    npm run dev
    ```
-   Open `http://localhost:3000`.
+   Open `http://localhost:3000`....
 
 ## Verifying Everything Works
 - Visit `/api/health`. It should return `{"mysql":"ok","neo4j":"ok"}`.
