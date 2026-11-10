@@ -129,12 +129,86 @@ ORDER BY finalScore DESC
 LIMIT 5
 ```
 
+**Stored procedure and function (MySQL):**
+```sql
+SELECT days_open(1);
+CALL assign_complaint(1, 2);   -- only an admin can be assigned
+```
+
+**CTE (resolution rate per category):**
+```sql
+WITH category_stats AS (
+  SELECT category_id, COUNT(*) AS total,
+         SUM(status IN ('resolved','closed')) AS resolved
+  FROM complaints GROUP BY category_id
+)
+SELECT cc.name AS category, s.total, s.resolved,
+       ROUND(100 * s.resolved / s.total, 1) AS resolution_pct
+FROM category_stats s JOIN complaint_categories cc ON cc.id = s.category_id
+ORDER BY resolution_pct DESC;
+```
+
+**Recursive CTE (complaints filed per day, last 7 days):**
+```sql
+WITH RECURSIVE days AS (
+  SELECT CURDATE() - INTERVAL 6 DAY AS d
+  UNION ALL
+  SELECT d + INTERVAL 1 DAY FROM days WHERE d < CURDATE()
+)
+SELECT days.d AS day, COUNT(c.id) AS complaints_filed
+FROM days LEFT JOIN complaints c ON DATE(c.created_at) = days.d
+GROUP BY days.d ORDER BY days.d;
+```
+
+**Nested query (users who filed more than the average):**
+```sql
+SELECT u.name, u.email FROM users u
+WHERE (SELECT COUNT(*) FROM complaints c WHERE c.filed_by = u.id) >
+      (SELECT AVG(cnt) FROM (SELECT COUNT(*) AS cnt FROM complaints
+                             WHERE filed_by IS NOT NULL GROUP BY filed_by) t);
+```
+
+**Correlated query (open longer than the average for its category):**
+```sql
+SELECT c.id, c.status, days_open(c.id) AS days_open
+FROM complaints c
+WHERE c.status IN ('open','assigned','in_progress')
+  AND DATEDIFF(NOW(), c.created_at) >
+      (SELECT AVG(DATEDIFF(NOW(), c2.created_at))
+       FROM complaints c2 WHERE c2.category_id = c.category_id);
+```
+
+**Multi-table join:**
+```sql
+SELECT c.id, cc.name AS category, c.status,
+       filer.name AS filed_by, admin_u.name AS assigned_admin
+FROM complaints c
+JOIN complaint_categories cc ON cc.id = c.category_id
+LEFT JOIN users filer   ON filer.id   = c.filed_by
+LEFT JOIN users admin_u ON admin_u.id = c.assigned_to;
+```
+
+**Update and delete a complaint (Cypher and SQL):**
+```cypher
+MATCH (c:Complaint {refId: $refId}) SET c += $props
+MATCH (c:Complaint {refId: $refId}) DETACH DELETE c
+```
+```sql
+DELETE FROM complaints WHERE id = ?;
+```
+
 ## 11. Advanced Database Features
 1. **Transactions (MySQL).** A status or assignment update runs inside `BEGIN` / `COMMIT` / `ROLLBACK`, so it applies completely or not at all.
 2. **Trigger (MySQL).** `trg_update_last_updated` sets `last_updated` on every update, without any application code.
 3. **View (MySQL).** `open_complaints_summary` provides an always-current count of open complaints per category for the admin dashboard.
 4. **Full-text search with graph traversal (Neo4j).** The lost/found matching combines a full-text index over descriptions with a score bonus for reports that share a Location node.
 5. **Indexing and constraints.** MySQL indexes on `status` and `category_id`; Neo4j uniqueness constraints on `refId` and on category and location names, plus the full-text index.
+7. **Stored procedure (MySQL).** `assign_complaint(complaint_id, admin_id)` checks that the assignee has the admin role, then sets the status to `assigned`. It raises an error otherwise.
+8. **Stored function (MySQL).** `days_open(complaint_id)` returns how many days a complaint has been open.
+9. **CTE and recursive CTE (MySQL).** A CTE computes the resolution rate per category. A recursive CTE builds a 7-day calendar to count complaints per day.
+10. **Nested and correlated queries (MySQL).** A nested query finds users who filed more complaints than average. A correlated query finds complaints open longer than the average for their own category.
+11. **Create, read, update and delete in Neo4j.** Students can edit a complaint's description and location (the Neo4j node is updated and the Location relationship is re-linked) and delete a complaint (MySQL row and Neo4j node are both removed). Only the owner or an admin may do this.
+12. **Role-based access in the database.** `advanced.sql` defines `student_role` and `admin_role` with different privileges (this needs a MySQL account allowed to create roles).
 6. **Cross-database consistency (application level).** MySQL and Neo4j cannot share a transaction, so filing a complaint creates the Neo4j node first and then the MySQL row. If the MySQL insert fails, the node is deleted again (a compensating rollback). This was tested (test case 3).
 
 ## 12. Authentication and Authorization
@@ -166,9 +240,14 @@ Application screens are in `docs/screenshots/`: login (`Cc_Login.png`), student 
 'docs/test-cases.md' lists 24 test cases covering cross-database filing, anonymity, the rollback, MySQL and Neo4j constraints, role-based access at page and API level, admin sign-up, the transaction, the trigger, the view and the matching. All 24 pass.
 
 ## 16. Individual Contribution
-**[Your name]:** [Write what you did. Based on the project history, that is the database design (MySQL schema, Neo4j graph model), all API routes, the cross-database filing and rollback logic, authentication and middleware, the advanced database features, the Neo4j migration, the interface and the documentation.]
+**Tharun Ganesh S:**
+- Designed and created the MySQL schema (tables, keys, constraints, indexes, trigger, view) and the Neo4j graph model with its constraints and full-text index.
+- Built the API routes, the cross-database filing and rollback logic, authentication and role-based access.
+- Added the stored procedure `assign_complaint`, the function `days_open`, CTE and recursive CTE queries, nested and correlated queries, and the multi-table join.
+- Added edit and delete for complaints (Neo4j update and delete, MySQL delete) with Edit and Delete buttons in the interface.
+- Produced the ER diagram, Neo4j screenshots and query evidence, and updated this report.
 
-**[Teammate's name]:** [Write what this person actually contributed. If nothing was committed, say so plainly.]
+**Syed Zayeed:** [To be filled in with his real contribution. The GitHub contributors page and commit history show what he committed.]
 
 The Git commit history shows the individual contributions.
 
