@@ -1,4 +1,5 @@
-'''mermaid erDiagram
+```mermaid
+erDiagram
     ROLES ||--o{ USERS : "has"
     USERS |o--o{ COMPLAINTS : "files"
     USERS |o--o{ COMPLAINTS : "assigned to"
@@ -49,4 +50,4 @@
     LOCATION_NODE {
         string name PK
     }
-'''
+```
