@@ -1,11 +1,15 @@
 import { NextRequest } from 'next/server';
 import { getPool } from '@/lib/mysql';
 import { getDriver } from '@/lib/neo4j';
-   import { getCaller } from '@/lib/authz';
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+import { getCaller } from '@/lib/authz';
+
+type Ctx = { params: Promise<{ id: string }> };
+
+// ---------- READ ----------
+export async function GET(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
-     const caller = await getCaller(req);
-   if (!caller) return Response.json({ error: 'Not logged in' }, { status: 401 });
+  const caller = await getCaller(req);
+  if (!caller) return Response.json({ error: 'Not logged in' }, { status: 401 });
   const pool = getPool();
 
   const [rows]: any = await pool.query(`
@@ -21,11 +25,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const row = rows[0];
-     if (caller.role !== 'admin' && row.filed_by !== caller.id) {
-     return Response.json({ error: 'Not allowed' }, { status: 403 });
-   }
+  if (caller.role !== 'admin' && row.filed_by !== caller.id) {
+    return Response.json({ error: 'Not allowed' }, { status: 403 });
+  }
 
-  // Fetch this complaint's report details from Neo4j
   let details: Record<string, any> = {};
   const session = getDriver().session();
   try {
@@ -60,4 +63,82 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     ...details,
     comments: []
   });
+}
+
+// Finds the complaint and checks the caller may change it (owner or admin)
+async function loadOwned(id: string, caller: { id: number; role: string }) {
+  const [rows]: any = await getPool().query(
+    `SELECT id, graph_ref_id, filed_by FROM complaints WHERE id = ?`, [id]);
+  if (rows.length === 0)
+    return { error: Response.json({ error: 'Complaint not found' }, { status: 404 }) };
+  if (caller.role !== 'admin' && rows[0].filed_by !== caller.id)
+    return { error: Response.json({ error: 'Not allowed' }, { status: 403 }) };
+  return { row: rows[0] };
+}
+
+// ---------- UPDATE (Neo4j) ----------
+export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const { id } = await params;
+  const caller = await getCaller(req);
+  if (!caller) return Response.json({ error: 'Not logged in' }, { status: 401 });
+  const { row, error } = await loadOwned(id, caller);
+  if (error) return error;
+
+  const { description, location, roomNumber, issueType } = await req.json();
+  const props: Record<string, any> = {};
+  if (description) props.description = description;
+  if (roomNumber) props.roomNumber = roomNumber;
+  if (issueType) props.issueType = issueType;
+  const locationName = location ? String(location).trim().toLowerCase() : null;
+
+  const session = getDriver().session();
+  try {
+    await session.run(
+      `MATCH (c:Complaint {refId: $refId}) SET c += $props`,
+      { refId: row.graph_ref_id, props }
+    );
+    if (locationName) {
+      await session.run(
+        `MATCH (c:Complaint {refId: $refId})
+         OPTIONAL MATCH (c)-[r:AT_LOCATION]->(:Location)
+         DELETE r
+         WITH DISTINCT c
+         MERGE (l:Location {name: $locationName})
+         CREATE (c)-[:AT_LOCATION]->(l)`,
+        { refId: row.graph_ref_id, locationName }
+      );
+    }
+    // touch the MySQL row so the trigger refreshes last_updated
+    await getPool().query(`UPDATE complaints SET status = status WHERE id = ?`, [id]);
+    return Response.json({ success: true });
+  } catch (err) {
+    console.error('Update failed:', err);
+    return Response.json({ error: 'Update failed' }, { status: 500 });
+  } finally {
+    await session.close();
+  }
+}
+
+// ---------- DELETE (MySQL + Neo4j) ----------
+export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const { id } = await params;
+  const caller = await getCaller(req);
+  if (!caller) return Response.json({ error: 'Not logged in' }, { status: 401 });
+  const { row, error } = await loadOwned(id, caller);
+  if (error) return error;
+
+  const session = getDriver().session();
+  try {
+    await getPool().query(`DELETE FROM complaints WHERE id = ?`, [id]);
+    await session.run(
+      `MATCH (c:Complaint {refId: $refId}) DETACH DELETE c`,
+      { refId: row.graph_ref_id }
+    );
+    return Response.json({ success: true });
+  } catch (err) {
+    console.error('Delete failed:', err);
+    return Response.json({ error: 'Delete failed' }, { status: 500 });
+  } finally {
+    await session.close();
+  }
 }
