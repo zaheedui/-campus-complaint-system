@@ -56,7 +56,7 @@ export default function SignupPage() {
         </div>
         <div>
           <label className="cv-label" htmlFor="password">Password</label>
-          <input id="password" type="password" placeholder="Choose a password" value={password} onChange={(e) => setPassword(e.target.value)} className="cv-input" />
+          <input id="password" type="password" minLength={8} placeholder="Choose a password (at least 8 characters)" value={password} onChange={(e) => setPassword(e.target.value)} className="cv-input" />
         </div>
         <div>
           <label className="cv-label" htmlFor="role">I am a</label>

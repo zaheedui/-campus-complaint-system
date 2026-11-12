@@ -1,10 +1,9 @@
-version: "3.8"
 services:
   neo4j:
     image: neo4j:5
     restart: always
     environment:
-      NEO4J_AUTH: neo4j/neo4jpass123
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -16,10 +15,10 @@ services:
     restart: always
     command: --log-bin-trust-function-creators=1
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: campus_complaints
       MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppass
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
     ports:
       - "3307:3306"
     volumes:

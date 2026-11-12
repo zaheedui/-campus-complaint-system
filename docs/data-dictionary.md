@@ -28,7 +28,7 @@
 | Column | Type | Constraint | Description |
 |---|---|---|---|
 | id | INT | PK, AUTO_INCREMENT | Unique complaint identifier |
-| graph_ref_id | VARCHAR(50) | NOT NULL | Links to the Neo4j Complaint node (equals its `refId`) |
+| graph_ref_id | CHAR(36) | UNIQUE, NOT NULL | Links to the Neo4j Complaint node (equals its `refId`) |
 | category_id | INT | FK → complaint_categories(id), NOT NULL | Complaint category |
 | filed_by | INT | FK → users(id), NULLABLE | Filer (NULL if anonymous) |
 | assigned_to | INT | FK → users(id), NULLABLE | Admin handling the complaint |
@@ -37,7 +37,9 @@
 | created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Creation time |
 | last_updated | TIMESTAMP | Updated by trigger | Last modification time |
 
-**Indexes:** `idx_complaints_status` on `complaints(status)`, `idx_complaints_category` on `complaints(category_id)`.
+**Indexes:** `idx_complaints_status`, `idx_complaints_category`, `idx_complaints_filer`, `idx_complaints_assignee`, `idx_complaints_created`; UNIQUE `uq_complaints_graph_ref`.
+
+**Checks:** `status` must be one of the five workflow states; anonymous complaints must have `filed_by IS NULL`, while non-anonymous complaints must have a filer.
 
 ## View and trigger
 | Object | Type | Description |

@@ -19,7 +19,7 @@ const handler = NextAuth({
           `SELECT u.id, u.name, u.email, u.password_hash, r.name AS role
            FROM users u JOIN roles r ON u.role_id = r.id
            WHERE u.email = ?`,
-          [credentials.email]
+          [credentials.email.trim().toLowerCase()]
         );
 
         if (rows.length === 0) return null;

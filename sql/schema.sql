@@ -1,110 +1,78 @@
--- ============================================================
--- Campus Complaint Management System — MySQL Schema
--- Structured, consistency-critical workflow data
--- ============================================================
+-- Campus Complaint Management System — MySQL 8.0+
+-- Run against a fresh database. For an older MongoDB-era database, see
+-- sql/migrations/001_mongo_to_neo4j_reference.sql before running this file.
 
+CREATE DATABASE IF NOT EXISTS campus_complaints
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 USE campus_complaints;
 
--- ============================
--- Tables
--- ============================
-
--- User roles: student or admin
-CREATE TABLE roles (
+CREATE TABLE IF NOT EXISTS roles (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(20) UNIQUE NOT NULL
-);
+  name VARCHAR(20) NOT NULL UNIQUE
+) ENGINE=InnoDB;
 
--- All registered users (students and admins share this table, distinguished by role_id)
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  email VARCHAR(150) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,       -- bcrypt hash, never plaintext
+  email VARCHAR(150) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
   role_id INT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (role_id) REFERENCES roles(id)
-);
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(id)
+) ENGINE=InnoDB;
 
--- The four complaint categories the system supports
-CREATE TABLE complaint_categories (
+CREATE TABLE IF NOT EXISTS complaint_categories (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(50) UNIQUE NOT NULL
-);
+  name VARCHAR(50) NOT NULL UNIQUE
+) ENGINE=InnoDB;
 
--- Core workflow table: one row per complaint, linked to its full
--- content in MongoDB via mongo_ref_id
-CREATE TABLE complaints (
+CREATE TABLE IF NOT EXISTS complaints (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  mongo_ref_id VARCHAR(50) NOT NULL,             -- links to the report in the NoSQL store (renamed to graph_ref_id below)
+  graph_ref_id CHAR(36) NOT NULL,
   category_id INT NOT NULL,
-  filed_by INT,                                -- NULL when is_anonymous = TRUE
-  assigned_to INT,                             -- admin handling this complaint
+  filed_by INT NULL,
+  assigned_to INT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'open',
-  is_anonymous BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- auto-updated by trigger below
-  FOREIGN KEY (category_id) REFERENCES complaint_categories(id),
-  FOREIGN KEY (filed_by) REFERENCES users(id),
-  FOREIGN KEY (assigned_to) REFERENCES users(id),
-  CHECK (status IN ('open', 'assigned', 'in_progress', 'resolved', 'closed'))
-);
+  is_anonymous BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_complaints_graph_ref UNIQUE (graph_ref_id),
+  CONSTRAINT fk_complaints_category FOREIGN KEY (category_id)
+    REFERENCES complaint_categories(id),
+  CONSTRAINT fk_complaints_filer FOREIGN KEY (filed_by)
+    REFERENCES users(id),
+  CONSTRAINT fk_complaints_assignee FOREIGN KEY (assigned_to)
+    REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT chk_complaint_status CHECK
+    (status IN ('open', 'assigned', 'in_progress', 'resolved', 'closed')),
+  CONSTRAINT chk_complaint_anonymity CHECK
+    ((is_anonymous = TRUE AND filed_by IS NULL) OR
+     (is_anonymous = FALSE AND filed_by IS NOT NULL)),
+  INDEX idx_complaints_status (status),
+  INDEX idx_complaints_category (category_id),
+  INDEX idx_complaints_filer (filed_by),
+  INDEX idx_complaints_assignee (assigned_to),
+  INDEX idx_complaints_created (created_at)
+) ENGINE=InnoDB;
 
--- ============================
--- Indexes
--- ============================
-
-CREATE INDEX idx_complaints_status ON complaints(status);
-CREATE INDEX idx_complaints_category ON complaints(category_id);
-
--- ============================
--- Seed data
--- ============================
-
-INSERT INTO roles (name) VALUES ('student'), ('admin');
-
-INSERT INTO complaint_categories (name) VALUES
+-- Idempotent reference data. No fake login accounts are inserted here.
+INSERT IGNORE INTO roles (name) VALUES ('student'), ('admin');
+INSERT IGNORE INTO complaint_categories (name) VALUES
   ('lost_item'), ('found_item'), ('maintenance'), ('ragging');
 
--- Note: these are placeholder test accounts with fake password hashes,
--- kept only for early development/testing. Real accounts are created
--- via the /signup page, which properly bcrypt-hashes passwords.
-INSERT INTO users (name, email, password_hash, role_id) VALUES
-  ('Test Student', 'student@test.com', 'placeholder_hash_1', 1),
-  ('Test Admin', 'admin@test.com', 'placeholder_hash_2', 2);
-
--- ============================
--- Trigger: auto-update last_updated on any row change
--- Advanced feature #2 — demonstrates automatic auditing at the DB level
--- ============================
-
+DROP TRIGGER IF EXISTS trg_update_last_updated;
 DELIMITER $$
-
 CREATE TRIGGER trg_update_last_updated
 BEFORE UPDATE ON complaints
 FOR EACH ROW
 BEGIN
-  SET NEW.last_updated = NOW();
+  SET NEW.last_updated = CURRENT_TIMESTAMP;
 END$$
-
 DELIMITER ;
 
--- ============================
--- View: open complaints summary, for admin dashboard
--- Advanced feature #3 — derived, always-current aggregate data
--- ============================
-
-CREATE VIEW open_complaints_summary AS
+CREATE OR REPLACE VIEW open_complaints_summary AS
 SELECT cc.name AS category, COUNT(*) AS open_count
 FROM complaints c
-JOIN complaint_categories cc ON c.category_id = cc.id
+JOIN complaint_categories cc ON cc.id = c.category_id
 WHERE c.status IN ('open', 'assigned', 'in_progress')
 GROUP BY cc.name;
-
-
-   -- ============================
-   -- Migration: the NoSQL store changed from MongoDB to Neo4j, so the
-   -- reference column now holds the refId of the Neo4j Complaint node
-   -- ============================
-
-   ALTER TABLE complaints RENAME COLUMN mongo_ref_id TO graph_ref_id;

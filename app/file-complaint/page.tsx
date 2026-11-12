@@ -4,13 +4,6 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 
-const categoryMap: Record<string, number> = {
-  lost_item: 1,
-  found_item: 2,
-  maintenance: 3,
-  ragging: 4
-};
-
 const categoryOptions = [
   { value: 'lost_item', icon: '🎒', label: 'Lost Item' },
   { value: 'found_item', icon: '🔎', label: 'Found Item' },
@@ -46,7 +39,6 @@ export default function FileComplaintPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         category,
-        categoryId: categoryMap[category],
         description,
         location: ['lost_item', 'found_item'].includes(category) ? location : undefined,
         roomNumber: category === 'maintenance' ? roomNumber : undefined,

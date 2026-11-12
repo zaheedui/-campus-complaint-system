@@ -1,7 +1,7 @@
 -- ============================================================
 -- advanced.sql  (run in MySQL Workbench after schema.sql)
 -- Covers: procedure, function, CTE, recursive CTE, nested,
--- correlated queries, multi-table joins, DELETE, DB-level RBAC
+-- correlated queries and multi-table joins
 -- ============================================================
 USE campus_complaints;
 
@@ -22,12 +22,25 @@ DROP PROCEDURE IF EXISTS assign_complaint;
 DELIMITER $$
 CREATE PROCEDURE assign_complaint(IN p_complaint INT, IN p_admin INT)
 BEGIN
-  DECLARE v_role VARCHAR(20);
-  SELECT r.name INTO v_role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = p_admin;
+  DECLARE v_role VARCHAR(20) DEFAULT NULL;
+  DECLARE v_complaint_count INT DEFAULT 0;
+
+  SELECT COUNT(*) INTO v_complaint_count
+  FROM complaints WHERE id = p_complaint;
+  IF v_complaint_count = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Complaint does not exist';
+  END IF;
+
+  SELECT r.name INTO v_role
+  FROM users u JOIN roles r ON u.role_id = r.id
+  WHERE u.id = p_admin;
   IF v_role IS NULL OR v_role <> 'admin' THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Assignee must be an admin';
   END IF;
-  UPDATE complaints SET assigned_to = p_admin, status = 'assigned' WHERE id = p_complaint;
+
+  UPDATE complaints
+  SET assigned_to = p_admin, status = 'assigned'
+  WHERE id = p_complaint;
 END$$
 DELIMITER ;
 -- usage: CALL assign_complaint(1, 2);  SELECT days_open(1);
@@ -77,11 +90,7 @@ JOIN complaint_categories cc ON cc.id = c.category_id
 LEFT JOIN users filer   ON filer.id   = c.filed_by
 LEFT JOIN users admin_u ON admin_u.id = c.assigned_to;
 
--- ---------- DELETE (DML) ----------
--- DELETE FROM complaints WHERE id = 1;
+-- DML INSERT/SELECT/UPDATE/DELETE demonstration is in sql/dml_operations.sql.
 
--- ---------- DB-LEVEL ROLE-BASED ACCESS CONTROL ----------
-CREATE ROLE IF NOT EXISTS 'student_role', 'admin_role';
-GRANT SELECT, INSERT ON campus_complaints.complaints TO 'student_role';
-GRANT SELECT ON campus_complaints.complaint_categories TO 'student_role';
-GRANT ALL PRIVILEGES ON campus_complaints.* TO 'admin_role';
+-- Database-level roles and test accounts are implemented in
+-- sql/database_rbac.sql. Run that file as a MySQL administrator after this file.

@@ -11,7 +11,27 @@ export async function POST(req: NextRequest) {
   if (!caller) return Response.json({ error: 'Not logged in' }, { status: 401 });
 
   const body = await req.json();
-  const { category, description, location, roomNumber, issueType, isAnonymous, categoryId } = body;
+  const { category, description, location, roomNumber, issueType, isAnonymous } = body;
+
+  if (typeof category !== 'string' || typeof description !== 'string' || !description.trim()) {
+    return Response.json({ error: 'Category and description are required' }, { status: 400 });
+  }
+  if (String(description).trim().length > 2000) {
+    return Response.json({ error: 'Description must be 2000 characters or fewer' }, { status: 400 });
+  }
+  if (isAnonymous && category !== 'ragging') {
+    return Response.json({ error: 'Anonymous filing is available only for ragging complaints' }, { status: 400 });
+  }
+
+  const pool = getPool();
+  const [categoryRows]: any = await pool.query(
+    'SELECT id FROM complaint_categories WHERE name = ?',
+    [category]
+  );
+  if (categoryRows.length === 0) {
+    return Response.json({ error: 'Invalid complaint category' }, { status: 400 });
+  }
+  const categoryId = categoryRows[0].id;
 
   const refId = randomUUID();
 
@@ -43,7 +63,6 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 2: create the workflow row in MySQL
-    const pool = getPool();
     try {
       const [result]: any = await pool.query(
         `INSERT INTO complaints (graph_ref_id, category_id, filed_by, is_anonymous, status)

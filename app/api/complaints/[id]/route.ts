@@ -128,17 +128,38 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
   if (error) return error;
 
   const session = getDriver().session();
+  const conn = await getPool().getConnection();
   try {
-    await getPool().query(`DELETE FROM complaints WHERE id = ?`, [id]);
+    // Keep the MySQL delete uncommitted until the corresponding graph node
+    // has also been deleted. If Neo4j fails, rollback preserves the SQL row.
+    await conn.beginTransaction();
+    const [result]: any = await conn.query(
+      `DELETE FROM complaints WHERE id = ?`, [id]
+    );
+    if (result.affectedRows === 0) {
+      await conn.rollback();
+      return Response.json({ error: 'Complaint not found' }, { status: 404 });
+    }
+
+    const graphCheck = await session.run(
+      `MATCH (c:Complaint {refId: $refId}) RETURN count(c) AS existing`,
+      { refId: row.graph_ref_id }
+    );
+    if (graphCheck.records[0].get('existing').toNumber() === 0) {
+      throw new Error('Linked Neo4j complaint node was not found');
+    }
     await session.run(
       `MATCH (c:Complaint {refId: $refId}) DETACH DELETE c`,
       { refId: row.graph_ref_id }
     );
+    await conn.commit();
     return Response.json({ success: true });
   } catch (err) {
-    console.error('Delete failed:', err);
-    return Response.json({ error: 'Delete failed' }, { status: 500 });
+    await conn.rollback();
+    console.error('Delete failed; MySQL deletion rolled back:', err);
+    return Response.json({ error: 'Delete failed; no SQL record was removed' }, { status: 500 });
   } finally {
+    conn.release();
     await session.close();
   }
 }
